@@ -72,7 +72,7 @@ class View(patterns.Publisher):
         self.msg_win_begin = (1,0)
         self.msg_win_dim = (self.height - 2, self.width)
         self.msg_win = curses.newwin(*self.msg_win_dim, *self.msg_win_begin)
-        self.msg_win.bkgd(curses.color_pair(1)|curses.A_ITALIC)
+        self.msg_win.bkgd(curses.color_pair(1)|curses.A_BOLD)
         self.msg_win.scrollok(True)
         self.msg_win.refresh()
         self._welcome_banner()
