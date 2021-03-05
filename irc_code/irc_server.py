@@ -49,15 +49,13 @@ class IRCServer():
     def __init__(self, HOST, PORT):
         self.HOST, self.PORT = HOST, PORT
         self.ADDR = (self.HOST, self.PORT)
-        self.setup()
 
-    def setup(self):
+        # Create and bind the server socket with the provided address.
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self.server.setblocking(False)
         self.server.bind(self.ADDR)
 
     """ 
-    Method to start the server and listen to connections incoming.
+    Method to start the server and listen to connections incoming from clients.
     """
     def start(self):
         self.server.listen()
@@ -65,14 +63,18 @@ class IRCServer():
         while True:
             conn, addr = self.server.accept()
             self.client_list.append(conn)
+
+            # Each client socket runs in a thread for concurrency between socket connections.
             thread = threading.Thread(target=self.handle_client, args=(conn, addr))
             thread.start()
+
             logger.info(f'[SERVER] Active connections: {len(self.client_list)}')
             logger.debug(f'[SERVER] Active threads: {threading.activeCount() - 1}')
+
         self.close()
 
     """
-    Communicate with each client and decide actions.
+    Communicate with each client and take actions.
     """
     def handle_client(self, conn, addr):
         logger.info(f'[SERVER] New connection from client. {addr} connected.')
@@ -84,37 +86,17 @@ class IRCServer():
         conn.close()
 
     """
-    Handle the received data from client.
-    Return a boolean indicates if the connection should persist.
+    Handle the received data from a client.
+    Return a boolean indicates if the connection should persist after handling.
     """
     def handle_data(self, conn, addr, msg):
-        logger.info(f'[SERVER] [{addr}] {msg}')
+        logger.info(f'[SERVER] received [{addr}] : {msg} ')
         print(f'[SERVER] [{addr}] {msg}')
 
-        # Denote if the client created profile before.
-        connection_existed = False
-        for each_user in self.online_users:
-            if each_user.addr is addr:
-                connection_existed = True
+        # Denote if current client profile is already created.
+        connection_existed = any(u.addr == addr for u in self.online_users)
 
-        if(msg.startswith('QUIT')):
-            self.client_list.remove(conn)
-            self.broadcast(conn, addr, msg.split(':', 1)[1])
-            return False
-
-        if(msg.startswith('NICK ')):
-            nickname = msg[len('NICK '):]
-
-            if connection_existed:
-                for each_user in self.online_users:
-                    if each_user.addr is addr:
-                        each_user.set_nickname(nickname)
-                        return True
-
-            new_user = user(addr)
-            new_user.set_nickname(nickname)
-            self.online_users.append(new_user)
-            return True
+        if(msg.startswith('NICK ')): return self.handle_NICK(conn, addr, msg, connection_existed)
 
         # TODO: Extract information properly
         if(msg.startswith('USER ')):
@@ -131,21 +113,7 @@ class IRCServer():
             self.online_users.append(new_user)
             return True
 
-        if(msg.startswith('JOIN ')):
-            channel = msg[len('JOIN '):]
-
-            if connection_existed:
-                for each_user in self.online_users:
-                    if each_user.addr is addr:
-                        each_user.join_channel(channel)
-                        if each_user.check_registered():
-                            self.broadcast(conn, addr, self.PRIVMSG('HOST', f'Welcome {each_user.nickname} to our amazing channel\n'), to_all=True)
-                        return True
-
-            new_user = user(addr)
-            new_user.join_channel(channel)
-            self.online_users.append(new_user)
-            return True
+        if(msg.startswith('JOIN ')): return self.handle_JOIN(conn, addr, msg, connection_existed)
 
         # TODO: Handle this case using regex properly.
         if 'PRIVMSG' in msg:
@@ -154,37 +122,73 @@ class IRCServer():
             self.broadcast(conn, addr, prepare_msg, False)
             return True
 
+        if(msg.startswith('QUIT')): return self.handle_QUIT(conn, addr, msg)
+
         return True
 
     def PRIVMSG(self, sender, content):
         return f':{sender} PRIVMSG {common.CHANNEL} :{content}\n'
-
 
     """
     Broadcast a message server-wide.
     """
     def broadcast(self, conn, addr, msg, to_all=False):
         logger.info(f'[SERVER] Broadcasting message from {addr} to the whole server')
-        print(f'[SERVER] Broadcasting message from {addr} to the whole server')
-        print(f'[SERVER] # of sockets in list {len(self.client_list)}')
         for client_socket in self.client_list:
             if (client_socket is not conn) or to_all:
-                print('Sending message: ', msg)
-                try:
-                    print(client_socket)
-                    client_socket.send(bytes(msg, common.ENCODE_FORMAT))
-                    time.sleep(1)
-                except Exception as e:
-                    print('Cannot send message: ', e)
+                print(f'[SERVER] Broadcasting: {msg}')
+                client_socket.send(bytes(msg, common.ENCODE_FORMAT))
 
     """
-    Close all sockets.
+    Close all openning sockets.
     """
     def close(self):
         for s in self.client_list:
             s.close()
         self.server.close()
 
+    """
+    Set of functions to handle requests from client in RFC 1459 format
+    """
+
+    def handle_NICK(self, conn, addr, msg, connection_existed):
+        nickname = msg[len('NICK '):]
+
+        if connection_existed:
+            for each_user in self.online_users:
+                if each_user.addr is addr:
+                    each_user.set_nickname(nickname)
+                    return True
+
+        new_user = user(addr)
+        new_user.set_nickname(nickname)
+        self.online_users.append(new_user)
+        return True
+
+    def handle_JOIN(self, conn, addr, msg, connection_existed):
+        channel = msg[len('JOIN '):]
+
+        if connection_existed:
+            for each_user in self.online_users:
+                if each_user.addr is addr:
+                    each_user.join_channel(channel)
+                    if each_user.check_registered():
+                        self.broadcast(conn, addr, self.PRIVMSG('SERVER', f'Welcome {each_user.nickname} to our amazing channel\n'), to_all=True)
+                    return True
+
+        new_user = user(addr)
+        new_user.join_channel(channel)
+        self.online_users.append(new_user)
+        return True
+
+    def handle_QUIT(self, conn, addr, msg):
+        self.client_list.remove(conn)
+        self.broadcast(conn, addr, msg.split(':', 1)[1])
+        return False
+
+    """
+    End of domain
+    """
 
 def main(args):
     # HOST = socket.gethostbyname(socket.gethostname())

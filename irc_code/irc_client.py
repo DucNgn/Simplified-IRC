@@ -13,6 +13,7 @@ Description:
 import socket
 import asyncio
 import sys, time
+import threading
 
 import patterns
 import logging
@@ -23,7 +24,6 @@ logging.basicConfig(filename='view.log', level=logging.DEBUG)
 logger = logging.getLogger()
 
 class IRCClient(patterns.Subscriber):
-    connected = False
     registered = False
     client = socket.socket()
 
@@ -36,24 +36,27 @@ class IRCClient(patterns.Subscriber):
         self.ADDR = (HOST, PORT)
         self.setup_client()
 
+    """
+    Connect, register, join channel.
+    """
     def setup_client(self):
         self.connect()
-        while not self.registered:
-            self.register()
+        self.register()
         self.join()
 
-    # Connect to server
+    """
+    Connect to the server.
+    """
     def connect(self):
         try:
             self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.client.connect(self.ADDR)
-            self.connected = True
         except ConnectionRefusedError as e:
             logger.debug(f'[IRC CLIENT] [{self.username}] failed to connect to the server. {e}')
             sys.exit()
 
     """
-    Register client using username and nickname
+    Register client using provided username and nickname
     """
     def register(self):
         self.client.send(bytes(self.NICK(), common.ENCODE_FORMAT))
@@ -63,6 +66,9 @@ class IRCClient(patterns.Subscriber):
         logger.debug(f'[IRCClient] Successfully registered client')
         self.registered = True
 
+    """
+    Automatically join #global.
+    """
     def join(self):
         self.client.send(bytes(self.JOIN(common.CHANNEL), common.ENCODE_FORMAT))
         time.sleep(1)
@@ -85,29 +91,37 @@ class IRCClient(patterns.Subscriber):
         self.add_msg(msg)
         self.send_message(msg)
         if msg.lower().startswith('/quit'):
-            # Command that leads to the closure of the process
-            raise KeyboardInterrupt
+            self.close('User quits')
 
+    """
+    Send message to channel.
+    """
     def send_message(self, msg):
         self.client.send(bytes(self.PRIVMSG(msg), common.ENCODE_FORMAT))
         time.sleep(1)
 
+    """
+    Add message to view.
+    """
     def add_msg(self, msg):
         self.view.add_msg(self.username, msg)
 
+    """
+    Add message to view from outsider.
+    """
     def add_msg_outside(self, username, msg):
         self.view.add_msg(username, msg)
 
-    async def run(self):
-        """
-        Driver of your IRC Client
-        """
+    def run(self):
         while True:
             msg_received = self.client.recv(common.HEADER_SIZE).decode(common.ENCODE_FORMAT)
             time.sleep(1)
-            # print('Received back: ', msg_received)
+            logger.debug(f'[IRC Client] received message from Server: {msg_received}')
             self.handle_data(msg_received)
 
+    """
+    Handle data received from server.
+    """
     def handle_data(self, msg):
         # Message comes in the form of :sender PRIVMSG nick :content
         # TODO: use regex to detect PRIVMSG
@@ -115,23 +129,18 @@ class IRCClient(patterns.Subscriber):
             sender, _, content = common.extract_message(msg)
             self.add_msg_outside(sender, content)
             return
-        
 
-    def extract_header(self, header):
-        sender = header.split(' ')[0]
-        receiver = header.split(' ')[2]
-        return (sender, receiver)
+    """
+    Close sockets with reason.
+    """    
+    def close(self, reason):
+        logger.debug(f"[IRCClient] Closing socket because {reason}")
+        self.client.send(bytes(f'{self.QUIT(reason)}', common.ENCODE_FORMAT))
+        self.client.close()
 
-    # Close IRC client object
-    def close(self):
-        # Terminate connection
-        logger.debug(f"Closing IRC Client object")
-        if (self.connected):
-            reason = 'IRC client object terminated'
-            msg = f'{self.QUIT(reason)}'
-            self.client.send(bytes(msg, common.ENCODE_FORMAT))
-    
-    # Message to signal server to terminate connection.
+    """
+    Set of functions to compose the correct syntax of RFC protocol.
+    """ 
     def QUIT(self, reason):
         return 'QUIT' + ' :' + reason
 
@@ -156,7 +165,10 @@ def main(args):
     username = 'Duke'
     nickname = 'Batman'
 
+    # Start a thread to wait for messages coming back from host
     client = IRCClient(HOST, PORT, username, nickname)
+    thread = threading.Thread(target=client.run)
+    thread.start()
 
     logger.info(f"Client object created")
     with view.View() as v:
@@ -168,14 +180,13 @@ def main(args):
         async def inner_run():
             await asyncio.gather(
                 v.run(),
-                client.run(),
                 return_exceptions=True,
             )
         try:
             asyncio.run( inner_run() )
         except KeyboardInterrupt:
             logger.debug(f"Signifies end of process")
-    client.close()
+    client.close('IRC Client object terminated')
 
 if __name__ == "__main__":
     # Parse your command line arguments here
