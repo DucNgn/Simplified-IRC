@@ -93,7 +93,8 @@ class IRCClient(patterns.Subscriber):
         self.add_msg(msg)
         self.send_message(msg)
         if msg.lower().startswith('/quit'):
-            self.close('User quits')
+            self.close(' left the chat')
+            raise KeyboardInterrupt
 
     """
     Send message to channel.
@@ -137,6 +138,11 @@ class IRCClient(patterns.Subscriber):
             self.add_msg_outside(sender, content)
             return
 
+        if msg == common.NICKNAMEINUSE:
+            self.add_msg_outside('SERVER','Nick name is already in use. Please try again')
+            self.close('Nick name is in used')
+            sys.exit()
+
     """
     Close sockets with reason.
     """    
@@ -145,6 +151,7 @@ class IRCClient(patterns.Subscriber):
         logger.debug(f"[IRCClient] Closing socket because {reason}")
         self.client.send(bytes(f'{self.QUIT(reason)}', common.ENCODE_FORMAT))
         self.client.close()
+        sys.exit()
 
     """
     Set of functions to compose the correct syntax of RFC protocol.
@@ -213,8 +220,8 @@ if __name__ == "__main__":
                         metavar="NICKNAME", default="GuestNick",
                         help="Target nickname to use")
 
-    parser.add_argument("-u", "--username", type=str, nargs="?",
-                        metavar="NICKNAME", default="GuestUser",
+    parser.add_argument("-u", "--username", type=str, nargs="*",
+                        metavar="USERNAME", default="GuestUser",
                         help="Target username to use")
 
     # parse the arguments from standard input

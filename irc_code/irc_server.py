@@ -81,11 +81,17 @@ class IRCServer():
                         else:
                             if sock in self.SOCKET_LIST:
                                 self.SOCKET_LIST.remove(sock)
+                                self.remove_user(int(soc.getpeername()[1]))
                     except:
-                        self.broadcast(sock, f'Client out of the server')
-                        print('Client offline')
+                        self.broadcast(sock, f'A client walked out of the server')
                         continue
         self.server_socket.close()
+
+    def remove_user(self, addr):
+        """ Remove a connection out of online users list """
+        for each in self.online_users:
+            if each.addr == addr:
+                self.online_users.remove(each)
 
 
     """
@@ -100,15 +106,25 @@ class IRCServer():
         # Check if current client profile was already created.
         profile_existed = any(u.addr == addr for u in self.online_users)
 
-        if(msg.startswith('NICK ')): self.handle_NICK(conn, addr, msg, profile_existed)
+        if(msg.startswith('NICK ')): 
+            self.handle_NICK(conn, addr, msg, profile_existed)
+            return
 
-        if(msg.startswith('USER ')): self.handle_USER(conn, addr, msg, profile_existed)
+        if(msg.startswith('USER ')): 
+            self.handle_USER(conn, addr, msg, profile_existed)
+            return
             
-        if(msg.startswith('JOIN ')): self.handle_JOIN(conn, addr, msg, profile_existed)
+        if(msg.startswith('JOIN ')): 
+            self.handle_JOIN(conn, addr, msg, profile_existed)
+            return
 
-        if 'PRIVMSG' in msg: self.handle_PRIVMSG(conn, msg)
+        if 'PRIVMSG' in msg: 
+            self.handle_PRIVMSG(conn, msg)
+            return
 
-        if(msg.startswith('QUIT')): return self.handle_QUIT(conn, addr, msg)
+        if(msg.startswith('QUIT')): 
+            self.handle_QUIT(conn, addr, msg)
+            return
 
 
     """
@@ -133,7 +149,15 @@ class IRCServer():
     """
 
     def handle_NICK(self, conn, addr, msg, profile_existed):
+        """ Format: NICK nickname """
         nickname = msg[len('NICK '):]
+
+        duplicated = self.duplicate_NICK(addr, nickname)
+        if duplicated:
+            # Send error status back to client.
+            conn.send(bytes(common.NICKNAMEINUSE, common.ENCODE_FORMAT))
+            self.remove_user(addr)
+            return
 
         if profile_existed:
             for each_user in self.online_users:
@@ -145,9 +169,13 @@ class IRCServer():
         new_user.set_nickname(nickname)
         self.online_users.append(new_user)
 
-    # TODO: Extract information properly
+    def duplicate_NICK(self, addr, nickname):
+        """ Check if a nickname existed in server """
+        return any(u.nickname == nickname and u.addr is not addr for u in self.online_users)
+
     def handle_USER(self, conn, addr, msg, profile_existed):
-        username = msg[len('USER '):]
+        """ Format: USER username hostname servername realname """
+        username = msg.split(' ')[1]
 
         if profile_existed:
             for each_user in self.online_users:
@@ -168,7 +196,7 @@ class IRCServer():
                 if each_user.addr == addr:
                     each_user.join_channel(channel)
                     if each_user.check_registered():
-                        self.broadcast(conn, self.PRIVMSG('SERVER', f'Welcome {each_user.nickname} to our amazing channel\n'))
+                        self.broadcast(conn, self.PRIVMSG('SERVER', f'Welcome {each_user.nickname} to our amazing channel\n'), True)
                     return
 
         new_user = user(addr)
@@ -179,7 +207,7 @@ class IRCServer():
     def handle_PRIVMSG(self, conn, msg):
         sender, _, content = common.extract_message(msg)
         prepare_msg = self.PRIVMSG(sender, content)
-        self.broadcast(conn, prepare_msg, False)
+        self.broadcast(conn, prepare_msg)
 
     def PRIVMSG(self, sender, content):
         return f':{sender} PRIVMSG {common.CHANNEL} :{content}\n'
@@ -187,14 +215,18 @@ class IRCServer():
     def handle_QUIT(self, conn, addr, msg):
         """ Format: QUIT :reason """
         self.SOCKET_LIST.remove(conn)
-        self.broadcast(conn, msg.split(':', 1)[1])
+        self.remove_user(addr)
+        self.broadcast(conn, str(self.find_username(addr) + ' ' + msg.split(':', 1)[1]))
 
+    def find_username(self, addr):
+        for each in self.online_users:
+            if each.addr == addr:
+                return each.username
     """
     End of domain
     """
 
 def main(args):
-    # HOST = socket.gethostbyname(socket.gethostname())
     HOST = ''
     PORT = args.port
     try:
@@ -206,7 +238,6 @@ def main(args):
         sys.exit()
 
 if __name__ == '__main__':
-    # TODO: Pass arguments properly here
     # create parser object
     parser = argparse.ArgumentParser(description="This is the irc client")
 
