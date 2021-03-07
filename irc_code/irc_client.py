@@ -45,6 +45,7 @@ class IRCClient(patterns.Subscriber):
         self.connect()
         self.register()
         self.join()
+        logger.info(f'[IRCClient] Successfully setup user account')
 
     """
     Connect to the server.
@@ -53,6 +54,7 @@ class IRCClient(patterns.Subscriber):
         try:
             self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.client.connect(self.ADDR)
+            logger.debug(f'[IRCClient] Successfully connected to the server')
         except ConnectionRefusedError as e:
             logger.debug(f'[IRC CLIENT] [{self.username}] failed to connect to the server. {e}')
             sys.exit()
@@ -65,7 +67,7 @@ class IRCClient(patterns.Subscriber):
         time.sleep(1)
         self.client.send(bytes(self.USER(), common.ENCODE_FORMAT))
         time.sleep(1)
-        logger.debug(f'[IRCClient] Successfully registered client')
+        logger.debug(f'[IRCClient] Successfully registered client with the server')
         self.registered = True
 
     """
@@ -74,7 +76,7 @@ class IRCClient(patterns.Subscriber):
     def join(self):
         self.client.send(bytes(self.JOIN(common.CHANNEL), common.ENCODE_FORMAT))
         time.sleep(1)
-        logger.debug(f'[IRCClient] Successfully join channel {common.CHANNEL}')
+        logger.debug(f'[IRCClient] Successfully joined channel {common.CHANNEL}')
 
     def set_view(self, view):
         self.view = view
@@ -91,29 +93,32 @@ class IRCClient(patterns.Subscriber):
 
     def process_input(self, msg):
         self.add_msg(msg)
-        self.send_message(msg)
         if msg.lower().startswith('/quit'):
             self.close(' left the chat')
             raise KeyboardInterrupt
+        else:
+            self.send_message(msg)
 
     """
     Send message to channel.
     """
     def send_message(self, msg):
-        self.client.send(bytes(self.PRIVMSG(msg), common.ENCODE_FORMAT))
+        send_msg = self.PRIVMSG(msg)
+        logger.debug(f'Sending message {send_msg} to server')
+        self.client.send(bytes(send_msg, common.ENCODE_FORMAT))
         time.sleep(1)
 
     """
     Add message to view.
     """
     def add_msg(self, msg):
-        self.view.add_msg(self.username, msg)
+        self.view.add_msg(self.nickname, msg)
 
     """
     Add message to view from outsider.
     """
-    def add_msg_outside(self, username, msg):
-        self.view.add_msg(username, msg)
+    def add_msg_outside(self, nickname, msg):
+        self.view.add_msg(nickname, msg)
 
     def run(self):
         while True:
@@ -121,10 +126,11 @@ class IRCClient(patterns.Subscriber):
                 break
             msg_received = self.client.recv(common.HEADER_SIZE).decode(common.ENCODE_FORMAT)
             time.sleep(1)
-            logger.debug(f'[IRC Client] received message from Server: {msg_received}')
+            logger.debug(f'[IRC Client] Received message from Server: {msg_received}')
             self.handle_data(msg_received)
 
     def stop_thread(self):
+        logger.debug('[IRCClient] Sending stop event to Thread')
         self.stop_event = True
 
     """
@@ -157,7 +163,7 @@ class IRCClient(patterns.Subscriber):
     Set of functions to compose the correct syntax of RFC protocol.
     """ 
     def QUIT(self, reason):
-        return 'QUIT' + ' :' + reason
+        return f'QUIT :{reason}'
 
     def NICK(self):
         return f'NICK {self.nickname}'
@@ -169,7 +175,7 @@ class IRCClient(patterns.Subscriber):
         return f'JOIN {channel}'
 
     def PRIVMSG(self, msg):
-        return f':{self.username} PRIVMSG {common.CHANNEL} :{msg}\n'
+        return f':{self.nickname} PRIVMSG {common.CHANNEL} :{msg}\n'
 
 
 def main(args):
@@ -184,6 +190,7 @@ def main(args):
     client = IRCClient(HOST, PORT, username, nickname)
     thread = threading.Thread(target=client.run)
     thread.start()
+    logger.debug(f'[IRCClient] Client thread started')
 
     logger.info(f"Client object created")
     with view.View() as v:
@@ -226,5 +233,5 @@ if __name__ == "__main__":
 
     # parse the arguments from standard input
     args = parser.parse_args()
-    print(args)
+    logger.info(f'[IRCClient] Received arguments from command line: {args}')
     main(args)
