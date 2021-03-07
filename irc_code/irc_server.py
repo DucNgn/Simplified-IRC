@@ -10,6 +10,7 @@ import threading
 import logging
 import view
 import common
+import select
 
 logging.basicConfig(filename='view.log', level=logging.DEBUG)
 logger = logging.getLogger()
@@ -32,161 +33,161 @@ class user:
 
     def join_channel(self, channel):
         self.channel = channel
+        self.check_registered()
 
     def check_registered(self):
-        self.registered = hasattr(self, 'username') and hasattr(self, 'nickname') and self.joined()
+        # User is registered successfully if the profile has username, nickname, and joined a channel.
+        self.registered = hasattr(self, 'username') and hasattr(self, 'nickname') and hasattr(self, 'channel')
         return self.registered
-
-    def joined(self):
-        return hasattr(self, 'channel')
 
 """
 Class represents the server.
 """
 class IRCServer():
-    server = socket.socket()
-    client_list = []
+    server_socket = socket.socket()
     online_users = []
+    SOCKET_LIST = []
 
     def __init__(self, HOST, PORT):
+        """ Initialize the server """
         self.HOST, self.PORT = HOST, PORT
         self.ADDR = (self.HOST, self.PORT)
 
         # Create and bind the server socket with the provided address.
-        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.bind(self.ADDR)
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.bind(self.ADDR)
+        self.server_socket.setblocking(False)
 
-    """ 
-    Method to start the server and listen to connections incoming from clients.
-    """
     def start(self):
-        self.server.listen()
-        logger.info(f'[SERVER] Server is listening on {self.HOST} : {self.PORT}')
+        """ Method to start the server and listen to connections incoming from clients. """
+        self.server_socket.listen()
+        self.SOCKET_LIST.append(self.server_socket)
+
         while True:
-            conn, addr = self.server.accept()
-            self.client_list.append(conn)
+            ready_to_read, _, _ = select.select(self.SOCKET_LIST, [], [], 0)
 
-            # Each client socket runs in a thread for concurrency between socket connections.
-            thread = threading.Thread(target=self.handle_client, args=(conn, addr))
-            thread.start()
+            for sock in ready_to_read:
+                # New connection request.
+                if sock is self.server_socket:
+                    sockfd, _ = self.server_socket.accept()
+                    self.SOCKET_LIST.append(sockfd)
 
-            logger.info(f'[SERVER] Active connections: {len(self.client_list)}')
-            logger.debug(f'[SERVER] Active threads: {threading.activeCount() - 1}')
+                # A message from client to server
+                else:
+                    try:
+                        data = sock.recv(common.HEADER_SIZE).decode(common.ENCODE_FORMAT)
+                        if data:
+                            self.handle_data(sock, data)
+                        else:
+                            if sock in self.SOCKET_LIST:
+                                self.SOCKET_LIST.remove(sock)
+                    except:
+                        self.broadcast(sock, f'Client out of the server')
+                        print('Client offline')
+                        continue
+        self.server_socket.close()
 
-        self.close()
-
-    """
-    Communicate with each client and take actions.
-    """
-    def handle_client(self, conn, addr):
-        logger.info(f'[SERVER] New connection from client. {addr} connected.')
-        connected = True
-        while connected:
-            msg_received = conn.recv(common.HEADER_SIZE).decode(common.ENCODE_FORMAT)
-            if msg_received:
-                connected = self.handle_data(conn, addr, msg_received)
-        conn.close()
 
     """
     Handle the received data from a client.
-    Return a boolean indicates if the connection should persist after handling.
     """
-    def handle_data(self, conn, addr, msg):
+    def handle_data(self, conn, msg):
+        addr = int(conn.getpeername()[1])
+
         logger.info(f'[SERVER] received [{addr}] : {msg} ')
         print(f'[SERVER] [{addr}] {msg}')
 
-        # Denote if current client profile is already created.
-        connection_existed = any(u.addr == addr for u in self.online_users)
+        # Check if current client profile was already created.
+        profile_existed = any(u.addr == addr for u in self.online_users)
 
-        if(msg.startswith('NICK ')): return self.handle_NICK(conn, addr, msg, connection_existed)
+        if(msg.startswith('NICK ')): self.handle_NICK(conn, addr, msg, profile_existed)
 
-        # TODO: Extract information properly
-        if(msg.startswith('USER ')):
-            username = msg[len('USER '):]
+        if(msg.startswith('USER ')): self.handle_USER(conn, addr, msg, profile_existed)
+            
+        if(msg.startswith('JOIN ')): self.handle_JOIN(conn, addr, msg, profile_existed)
 
-            if connection_existed:
-                for each_user in self.online_users:
-                    if each_user.addr is addr:
-                        each_user.set_username(username)
-                        return True
-
-            new_user = user(addr)
-            new_user.set_username(username)
-            self.online_users.append(new_user)
-            return True
-
-        if(msg.startswith('JOIN ')): return self.handle_JOIN(conn, addr, msg, connection_existed)
-
-        # TODO: Handle this case using regex properly.
-        if 'PRIVMSG' in msg:
-            sender, _, content = common.extract_message(msg)
-            prepare_msg = self.PRIVMSG(sender, content)
-            self.broadcast(conn, addr, prepare_msg, False)
-            return True
+        if 'PRIVMSG' in msg: self.handle_PRIVMSG(conn, msg)
 
         if(msg.startswith('QUIT')): return self.handle_QUIT(conn, addr, msg)
 
-        return True
-
-    def PRIVMSG(self, sender, content):
-        return f':{sender} PRIVMSG {common.CHANNEL} :{content}\n'
 
     """
     Broadcast a message server-wide.
     """
-    def broadcast(self, conn, addr, msg, to_all=False):
-        logger.info(f'[SERVER] Broadcasting message from {addr} to the whole server')
-        for client_socket in self.client_list:
-            if (client_socket is not conn) or to_all:
+    def broadcast(self, conn, msg, to_all=False):
+        for sock in self.SOCKET_LIST:
+            if (sock is not self.server_socket) and ((sock is not conn) or to_all):
                 print(f'[SERVER] Broadcasting: {msg}')
-                client_socket.send(bytes(msg, common.ENCODE_FORMAT))
+                sock.send(bytes(msg, common.ENCODE_FORMAT))
 
     """
     Close all openning sockets.
     """
     def close(self):
-        for s in self.client_list:
+        for s in self.SOCKET_LIST:
             s.close()
-        self.server.close()
+        self.server_socket.close()
 
     """
-    Set of functions to handle requests from client in RFC 1459 format
+    Set of functions to handle requests from client to server in RFC 1459 format
     """
 
-    def handle_NICK(self, conn, addr, msg, connection_existed):
+    def handle_NICK(self, conn, addr, msg, profile_existed):
         nickname = msg[len('NICK '):]
 
-        if connection_existed:
+        if profile_existed:
             for each_user in self.online_users:
-                if each_user.addr is addr:
+                if each_user.addr == addr:
                     each_user.set_nickname(nickname)
-                    return True
+                    return
 
         new_user = user(addr)
         new_user.set_nickname(nickname)
         self.online_users.append(new_user)
-        return True
 
-    def handle_JOIN(self, conn, addr, msg, connection_existed):
+    # TODO: Extract information properly
+    def handle_USER(self, conn, addr, msg, profile_existed):
+        username = msg[len('USER '):]
+
+        if profile_existed:
+            for each_user in self.online_users:
+                if each_user.addr == addr:
+                    each_user.set_username(username)
+                    return
+
+        new_user = user(int(addr))
+        new_user.set_username(username)
+        self.online_users.append(new_user)
+
+    def handle_JOIN(self, conn, addr, msg, profile_existed):
+        """ Format: JOIN #global """
         channel = msg[len('JOIN '):]
 
-        if connection_existed:
+        if profile_existed:
             for each_user in self.online_users:
-                if each_user.addr is addr:
+                if each_user.addr == addr:
                     each_user.join_channel(channel)
                     if each_user.check_registered():
-                        self.broadcast(conn, addr, self.PRIVMSG('SERVER', f'Welcome {each_user.nickname} to our amazing channel\n'), to_all=True)
-                    return True
+                        self.broadcast(conn, self.PRIVMSG('SERVER', f'Welcome {each_user.nickname} to our amazing channel\n'))
+                    return
 
         new_user = user(addr)
         new_user.join_channel(channel)
         self.online_users.append(new_user)
-        return True
+
+    # TODO: Handle this case using regex properly.
+    def handle_PRIVMSG(self, conn, msg):
+        sender, _, content = common.extract_message(msg)
+        prepare_msg = self.PRIVMSG(sender, content)
+        self.broadcast(conn, prepare_msg, False)
+
+    def PRIVMSG(self, sender, content):
+        return f':{sender} PRIVMSG {common.CHANNEL} :{content}\n'
 
     def handle_QUIT(self, conn, addr, msg):
-        self.client_list.remove(conn)
-        self.broadcast(conn, addr, msg.split(':', 1)[1])
-        return False
+        """ Format: QUIT :reason """
+        self.SOCKET_LIST.remove(conn)
+        self.broadcast(conn, msg.split(':', 1)[1])
 
     """
     End of domain

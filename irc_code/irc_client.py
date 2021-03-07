@@ -27,6 +27,7 @@ logger = logging.getLogger()
 class IRCClient(patterns.Subscriber):
     registered = False
     client = socket.socket()
+    stop_event = False
 
     def __init__(self, HOST, PORT, username, nickname):
         super().__init__()
@@ -115,10 +116,15 @@ class IRCClient(patterns.Subscriber):
 
     def run(self):
         while True:
+            if self.stop_event:
+                break
             msg_received = self.client.recv(common.HEADER_SIZE).decode(common.ENCODE_FORMAT)
             time.sleep(1)
             logger.debug(f'[IRC Client] received message from Server: {msg_received}')
             self.handle_data(msg_received)
+
+    def stop_thread(self):
+        self.stop_event = True
 
     """
     Handle data received from server.
@@ -135,6 +141,7 @@ class IRCClient(patterns.Subscriber):
     Close sockets with reason.
     """    
     def close(self, reason):
+        self.stop_thread()
         logger.debug(f"[IRCClient] Closing socket because {reason}")
         self.client.send(bytes(f'{self.QUIT(reason)}', common.ENCODE_FORMAT))
         self.client.close()

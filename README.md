@@ -13,3 +13,11 @@ Main purpose of this repo is to implement a simple client & server in Python wit
 ## Set up
 + `pipenv shell` to start the virtual shell.
 + `pipenv install` to install dependencies.
++ `pipenv install --dev` to install dev dependencies.
+
+**Note**: The `curses` package (responsible for the TUI) is not built-in on Windows Python. Run 
+
+```
+pipenv install windows-curses
+```
+to install `curses`.
