@@ -263,7 +263,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="This is the irc client")
 
     # defining arguments for parser object
-    parser.add_argument("-p", "--port", type=str, nargs=1,
+    parser.add_argument("-p", "--port", type=int, nargs="?",
                         metavar="PORT", default=5050,
                         help="Target port to use")
 

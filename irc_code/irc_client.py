@@ -219,7 +219,7 @@ if __name__ == "__main__":
                         metavar="SERVER", default="localhost",
                         help="Target server to initiate a connection to")
 
-    parser.add_argument("-p", "--port", type=str, nargs="?",
+    parser.add_argument("-p", "--port", type=int, nargs="?",
                         metavar="PORT", default=5050,
                         help="Target port to use")
 
