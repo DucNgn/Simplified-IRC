@@ -92,8 +92,8 @@ class IRCServer():
                                 self.SOCKET_LIST.remove(sock)
                                 self.remove_user(int(sock.getpeername()[1]))
                     except:
-                        logger.info(f'A client disconnected from the server')
-                        print(f'A client disconnected from the server')
+                        logger.info(f'[SERVER] A client disconnected from the server')
+                        print(f'[SERVER] A client disconnected from the server')
                         self.broadcast(sock, f'A client walked out of the server')
                         continue
         self.server_socket.close()

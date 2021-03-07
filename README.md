@@ -20,4 +20,11 @@ Main purpose of this repo is to implement a simple client & server in Python wit
 ```
 pipenv install windows-curses
 ```
+
 to install `curses`.
+
++ Full list of requirements is in `requirements.txt`
+
+## Run
++ `python irc_server.py` inside `irc_code` folder to start up the server.
++ `python irc_client.py` inside `irc_code` folder to start a client (can start many). Command `/quit` to quit from client side.
