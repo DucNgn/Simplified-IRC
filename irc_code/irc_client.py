@@ -220,7 +220,7 @@ if __name__ == "__main__":
                         metavar="NICKNAME", default="GuestNick",
                         help="Target nickname to use")
 
-    parser.add_argument("-u", "--username", type=str, nargs="*",
+    parser.add_argument("-u", "--username", type=str, nargs="?",
                         metavar="USERNAME", default="GuestUser",
                         help="Target username to use")
 
