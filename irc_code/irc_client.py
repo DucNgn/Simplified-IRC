@@ -194,19 +194,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="This is the irc client")
 
     # defining arguments for parser object
-    parser.add_argument("-s", "--server", type=str, nargs="*",
+    parser.add_argument("-s", "--server", type=str, nargs="?",
                         metavar="SERVER", default="localhost",
                         help="Target server to initiate a connection to")
 
-    parser.add_argument("-p", "--port", type=str, nargs="*",
+    parser.add_argument("-p", "--port", type=str, nargs="?",
                         metavar="PORT", default=5050,
                         help="Target port to use")
 
-    parser.add_argument("-n", "--nickname", type=str, nargs="*",
+    parser.add_argument("-n", "--nickname", type=str, nargs="?",
                         metavar="NICKNAME", default="GuestNick",
                         help="Target nickname to use")
 
-    parser.add_argument("-u", "--username", type=str, nargs="*",
+    parser.add_argument("-u", "--username", type=str, nargs="?",
                         metavar="NICKNAME", default="GuestUser",
                         help="Target username to use")
 
