@@ -6,4 +6,5 @@
 #
 
 -i https://pypi.org/simple
+argparse==1.4.0
 windows-curses==2.2.0

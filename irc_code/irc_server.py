@@ -4,6 +4,8 @@ SERVER SIDE IMPLEMENTATION
 
 import socket
 import sys, time
+import argparse
+
 import threading
 import logging
 import view
@@ -193,7 +195,7 @@ class IRCServer():
 def main(args):
     # HOST = socket.gethostbyname(socket.gethostname())
     HOST = ''
-    PORT = 5050
+    PORT = args.port
     try:
         server = IRCServer(HOST, PORT)
         server.start()
@@ -204,5 +206,15 @@ def main(args):
 
 if __name__ == '__main__':
     # TODO: Pass arguments properly here
-    args = None
+    # create parser object
+    parser = argparse.ArgumentParser(description="This is the irc client")
+
+    # defining arguments for parser object
+    parser.add_argument("-p", "--port", type=str, nargs=1,
+                        metavar="PORT", default=5050,
+                        help="Target port to use")
+
+    # parse the arguments from standard input
+    args = parser.parse_args()
+    print(args)
     main(args)

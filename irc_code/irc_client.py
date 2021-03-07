@@ -14,6 +14,7 @@ import socket
 import asyncio
 import sys, time
 import threading
+import argparse
 
 import patterns
 import logging
@@ -160,10 +161,10 @@ class IRCClient(patterns.Subscriber):
 def main(args):
     # TODO: command line argument to do this properly.
     # HOST = socket.gethostbyname(socket.gethostname())
-    HOST = 'localhost'
-    PORT = 5050
-    username = 'Duke'
-    nickname = 'Batman'
+    HOST = args.server
+    PORT = args.port
+    username = args.username
+    nickname = args.nickname
 
     # Start a thread to wait for messages coming back from host
     client = IRCClient(HOST, PORT, username, nickname)
@@ -189,6 +190,27 @@ def main(args):
     client.close('IRC Client object terminated')
 
 if __name__ == "__main__":
-    # Parse your command line arguments here
-    args = None
+    # create parser object
+    parser = argparse.ArgumentParser(description="This is the irc client")
+
+    # defining arguments for parser object
+    parser.add_argument("-s", "--server", type=str, nargs="*",
+                        metavar="SERVER", default="localhost",
+                        help="Target server to initiate a connection to")
+
+    parser.add_argument("-p", "--port", type=str, nargs="*",
+                        metavar="PORT", default=5050,
+                        help="Target port to use")
+
+    parser.add_argument("-n", "--nickname", type=str, nargs="*",
+                        metavar="NICKNAME", default="GuestNick",
+                        help="Target nickname to use")
+
+    parser.add_argument("-u", "--username", type=str, nargs="*",
+                        metavar="NICKNAME", default="GuestUser",
+                        help="Target username to use")
+
+    # parse the arguments from standard input
+    args = parser.parse_args()
+    print(args)
     main(args)
