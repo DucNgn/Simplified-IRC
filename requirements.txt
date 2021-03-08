@@ -1,0 +1,10 @@
+astroid==2.5.1
+isort==5.7.0
+lazy-object-proxy==1.5.2
+mccabe==0.6.1
+pylint==2.7.2
+rope==0.18.0
+toml==0.10.2
+wrapt==1.12.1
+windows-curses==2.2.0
+argparse==1.4.0
