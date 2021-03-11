@@ -77,8 +77,8 @@ class IRCServer():
                 if sock is self.server_socket:
                     sockfd, addr = self.server_socket.accept()
                     self.SOCKET_LIST.append(sockfd)
-                    logger.info(f'[SERVER] Received and accepted new connection from [{addr}]')
-                    print(f'[SERVER] Received and accepted new connection from [{addr}]')
+                    logger.info(f'\n[SERVER] Received and accepted new connection from [{addr}]')
+                    print(f'\n[SERVER] Received and accepted new connection from [{addr}]')
 
                 # A message from client to server
                 else:
@@ -215,7 +215,7 @@ class IRCServer():
                     each_user.join_channel(channel)
                     logger.info(f'[SERVER] [{addr}] Successfully join the channel {channel}')
                     if each_user.check_registered():
-                        self.broadcast(conn, self.PRIVMSG('SERVER', f'Welcome {each_user.nickname} to our amazing channel\n'), True)
+                        self.broadcast(conn, self.PRIVMSG('SERVER', f'Welcome {each_user.nickname} to our amazing channel'), True)
                     return
 
         new_user = user(addr)
@@ -229,7 +229,7 @@ class IRCServer():
         self.broadcast(conn, prepare_msg)
 
     def PRIVMSG(self, sender, content):
-        return f':{sender} PRIVMSG {common.CHANNEL} :{content}\n'
+        return f':{sender} PRIVMSG {common.CHANNEL} :{content}'
 
     def handle_QUIT(self, conn, addr, msg):
         """ Format: QUIT :reason """

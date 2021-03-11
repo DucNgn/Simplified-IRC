@@ -175,7 +175,7 @@ class IRCClient(patterns.Subscriber):
         return f'JOIN {channel}'
 
     def PRIVMSG(self, msg):
-        return f':{self.nickname} PRIVMSG {common.CHANNEL} :{msg}\n'
+        return f':{self.nickname} PRIVMSG {common.CHANNEL} :{msg}'
 
 
 def main(args):
